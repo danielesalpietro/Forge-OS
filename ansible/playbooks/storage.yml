@@ -1,0 +1,10 @@
+---
+- name: Forge-OS storage stack (Phase 2)
+  hosts: all
+  become: true
+  vars_files:
+    - "../profiles/{{ forge_profile | default('baseline') }}.yml"
+  roles:
+    - {role: forge_ceph, tags: [storage, ceph], when: forge_storage_enabled | bool}
+    - {role: forge_monitoring, tags: [monitoring], when: forge_monitoring_enabled | bool}
+    - {role: forge_backup, tags: [backup], when: forge_backup_enabled | bool}

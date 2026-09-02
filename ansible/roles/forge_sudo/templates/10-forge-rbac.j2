@@ -1,0 +1,13 @@
+# Managed by Forge-OS (forge_sudo) - RBAC model
+# forge-admin   : platform administrators, full privilege (every session is recorded)
+# forge-operator: day-2 operators, limited command set, no shell escalation
+Cmnd_Alias FORGE_OPERATOR = /usr/bin/systemctl status *, /usr/bin/systemctl restart *, \
+                            /usr/bin/systemctl start *, /usr/bin/systemctl stop *, \
+                            /usr/bin/journalctl *, /usr/local/sbin/forge-validate *, \
+                            /usr/bin/apt-get update, /usr/bin/apt-get upgrade, \
+                            /usr/bin/pro status, /usr/sbin/nft list *, \
+                            /usr/bin/fail2ban-client status *, /usr/sbin/aureport *, /usr/sbin/ausearch *
+Cmnd_Alias FORGE_DENY     = /bin/su, /usr/bin/su, /bin/bash, /bin/sh, /usr/bin/sudo, /usr/bin/visudo, /usr/bin/passwd root
+
+%{{ forge_admin_group }}    ALL=(ALL:ALL) NOPASSWD: ALL
+%{{ forge_operator_group }} ALL=(root) NOPASSWD: FORGE_OPERATOR, !FORGE_DENY

@@ -1,0 +1,105 @@
+name: Build ISO
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Autoinstall profile
+        type: choice
+        options: [baseline, vm-dev, storage-node]
+        default: baseline
+      kernel_args:
+        description: Extra kernel arguments (e.g. serial console for tests)
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  PROFILE: ${{ inputs.profile || 'baseline' }}
+  FORGE_KERNEL_ARGS: ${{ inputs.kernel_args || '' }}
+
+jobs:
+  builder:
+    name: Builder image
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/forge-os-builder:noble" >> "$GITHUB_OUTPUT"
+      - name: Build and push builder
+        uses: docker/build-push-action@v6
+        with:
+          context: build
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  iso:
+    name: Remaster ISO (${{ inputs.profile || 'baseline' }})
+    needs: builder
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Cache base ISO
+        uses: actions/cache@v4
+        with:
+          path: build/cache
+          key: base-iso-${{ hashFiles('build/forge.env') }}
+
+      - name: Build ISO
+        env:
+          BUILDER_IMAGE: ghcr.io/${{ github.repository_owner }}/forge-os-builder
+          FORGE_ADMIN_SSH_KEY: ${{ vars.FORGE_ADMIN_SSH_KEY }}
+          FORGE_LUKS_PASSPHRASE: ${{ secrets.FORGE_LUKS_PASSPHRASE }}
+          FORGE_HOSTNAME: ${{ vars.FORGE_HOSTNAME || 'forge-node' }}
+        run: |
+          if [ -z "$FORGE_ADMIN_SSH_KEY" ]; then
+            echo "::warning::vars.FORGE_ADMIN_SSH_KEY is not set, generating a throw-away key for this build"
+            ssh-keygen -t ed25519 -N '' -f build/ci-key -q
+            export FORGE_ADMIN_SSH_KEY="$(cat build/ci-key.pub)"
+          fi
+          make iso BUILDER_IMAGE="${BUILDER_IMAGE,,}"
+          ls -lh build/out
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-os-${{ env.PROFILE }}-iso
+          path: |
+            build/out/*.iso
+            build/out/*.sha256
+            build/out/*.manifest.json
+          retention-days: 7
+          compression-level: 0
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/out/*.iso
+            build/out/*.sha256
+            build/out/*.manifest.json
+          generate_release_notes: true

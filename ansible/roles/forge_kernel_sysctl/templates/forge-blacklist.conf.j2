@@ -1,0 +1,8 @@
+# Managed by Forge-OS (forge_kernel_sysctl)
+{% for m in forge_blacklist_modules %}
+install {{ m }} /bin/false
+blacklist {{ m }}
+{% endfor %}
+{% if forge_usb_storage_blocked %}
+install usb-storage /bin/false
+{% endif %}

@@ -1,0 +1,32 @@
+---
+- name: Forge-OS security baseline
+  hosts: all
+  become: true
+  vars_files:
+    - "../profiles/{{ forge_profile | default('baseline') }}.yml"
+  pre_tasks:
+    - name: Detect container execution (Docker/molecule sub-developments)
+      ansible.builtin.set_fact:
+        forge_container_mode: "{{ ansible_virtualization_role == 'guest' and ansible_virtualization_type in ['docker', 'container', 'podman', 'lxc'] }}"
+      tags: [always]
+    - name: Detect virtual machine
+      ansible.builtin.set_fact:
+        forge_is_vm: "{{ ansible_virtualization_role == 'guest' }}"
+      tags: [always]
+  roles:
+    - {role: forge_base, tags: [base]}
+    - {role: forge_kernel_sysctl, tags: [kernel, sysctl]}
+    - {role: forge_ssh, tags: [ssh]}
+    - {role: forge_sudo, tags: [sudo, rbac]}
+    - {role: forge_apparmor, tags: [apparmor]}
+    - {role: forge_auditd, tags: [audit]}
+    - {role: forge_nftables, tags: [firewall]}
+    - {role: forge_fail2ban, tags: [fail2ban]}
+    - {role: forge_unattended_upgrades, tags: [updates]}
+    - {role: forge_systemd_hardening, tags: [systemd]}
+    - {role: forge_luks_tpm, tags: [tpm, luks]}
+    - {role: forge_identity, tags: [identity]}
+    - {role: forge_mfa, tags: [mfa]}
+    - {role: forge_ubuntu_pro, tags: [pro]}
+    - {role: forge_cis, tags: [cis]}
+    - {role: forge_validate, tags: [validate]}

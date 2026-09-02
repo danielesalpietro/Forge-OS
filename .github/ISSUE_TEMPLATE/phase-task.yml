@@ -1,0 +1,28 @@
+name: Plan task
+description: A deliverable from docs/PLAN.md
+title: "[P<phase>.<milestone>] <task>"
+labels: [task]
+body:
+  - type: input
+    id: plan-id
+    attributes:
+      label: Plan item
+      description: Identifier from docs/PLAN.md (e.g. P1.2-03)
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and acceptance criteria
+    validations:
+      required: true
+  - type: dropdown
+    id: env
+    attributes:
+      label: Development / test environment
+      multiple: true
+      options: [Docker, KVM, VMware, Bare-metal]
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / dependencies

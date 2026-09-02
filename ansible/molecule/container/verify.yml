@@ -1,0 +1,16 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  tasks:
+    - name: sshd config is valid
+      ansible.builtin.command: sshd -t
+      changed_when: false
+    - name: sudoers is valid
+      ansible.builtin.command: visudo -c
+      changed_when: false
+    - name: RBAC groups exist
+      ansible.builtin.getent:
+        database: group
+        key: "{{ item }}"
+      loop: [forge-admin, forge-operator]

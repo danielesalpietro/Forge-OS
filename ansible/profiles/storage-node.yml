@@ -1,0 +1,10 @@
+---
+# Phase 2 storage nodes: baseline + storage stack.
+forge_tpm_enroll: "yes"
+forge_cis_enabled: true
+forge_storage_enabled: true
+forge_monitoring_enabled: true
+forge_nftables_extra_input_rules:
+  - "tcp dport { 3300, 6789 } accept comment \"ceph mon\""
+  - "tcp dport 6800-7300 accept comment \"ceph osd/mds/mgr\""
+  - "tcp dport 9100 accept comment \"node_exporter\""

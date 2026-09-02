@@ -1,0 +1,28 @@
+# /etc/forge/forge.conf - Forge-OS node configuration, read by forge-firstboot
+# and forge-validate. Rendered at ISO build time; override per node by dropping
+# files into /etc/forge/forge.conf.d/*.conf (sourced in lexical order).
+FORGE_VERSION=${FORGE_VERSION}
+FORGE_PROFILE=${PROFILE}
+FORGE_ADMIN_USER=${FORGE_ADMIN_USER}
+
+# TPM2-bound LUKS unlock at first boot: auto (enrol if TPM2 + Secure Boot are
+# present), yes (fail if absent), no (keep passphrase unlock, rotate key only).
+FORGE_TPM_ENROLL=${FORGE_TPM_ENROLL}
+# PCRs sealed into the TPM policy. 7 = Secure Boot state (survives firmware
+# updates); add 0,2,4 for stricter measured-boot binding (needs re-enrolment
+# after firmware/bootloader updates).
+FORGE_TPM_PCRS=${FORGE_TPM_PCRS}
+# Optional remote key escrow (Tang servers, comma separated). When set, the
+# LUKS volume is bound with Shamir secret sharing: TPM2 OR Tang (t=1).
+FORGE_TANG_URLS=${FORGE_TANG_URLS}
+
+# CIS benchmark level applied by the ansible-lockdown role (1 or 2).
+FORGE_CIS_LEVEL=${FORGE_CIS_LEVEL}
+# Identity backend: none | ad | ldap (see ansible/roles/forge_identity).
+FORGE_IDENTITY_BACKEND=${FORGE_IDENTITY_BACKEND}
+# Ubuntu Pro token file (attach at first boot when the file exists).
+FORGE_PRO_TOKEN_FILE=/etc/forge/pro-token
+# Reboot once the first-boot hardening is complete (recommended: yes).
+FORGE_REBOOT_AFTER_FIRSTBOOT=${FORGE_REBOOT_AFTER_FIRSTBOOT}
+# Extra Ansible variables (YAML) merged into the first-boot run, if present.
+FORGE_ANSIBLE_EXTRA_VARS=/etc/forge/ansible-extra-vars.yml

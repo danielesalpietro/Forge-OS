@@ -1,0 +1,41 @@
+---
+- name: Install forge-validate
+  ansible.builtin.copy:
+    src: "{{ forge_validate_source }}"
+    dest: /usr/local/sbin/forge-validate
+    mode: "0755"
+    remote_src: "{{ forge_validate_remote_src }}"
+  when: forge_validate_source | length > 0
+
+- name: Daily validation timer (drift detection)
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    mode: "0644"
+    content: "{{ item.content }}"
+  loop:
+    - name: forge-validate.service
+      content: |
+        [Unit]
+        Description=Forge-OS baseline validation (drift detection)
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/sh -c '/usr/local/sbin/forge-validate --json > /var/lib/forge/validation-report.json; /usr/local/sbin/forge-validate --text > /var/lib/forge/validation-report.txt'
+    - name: forge-validate.timer
+      content: |
+        [Unit]
+        Description=Daily Forge-OS baseline validation
+        [Timer]
+        OnCalendar=daily
+        RandomizedDelaySec=1h
+        Persistent=true
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Enable validation timer
+  ansible.builtin.systemd:
+    name: forge-validate.timer
+    enabled: true
+    daemon_reload: true
+  when: not forge_container_mode | default(false)

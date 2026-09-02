@@ -1,0 +1,15 @@
+---
+profile: moderate
+exclude_paths:
+  - vendor/
+  - molecule/
+  - .cache/
+skip_list:
+  - yaml[line-length]
+  - name[template]
+  - var-naming[no-role-prefix]
+  - risky-shell-pipe
+warn_list:
+  - experimental
+  - command-instead-of-module
+  - no-changed-when

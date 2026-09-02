@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: forge_auditd
+  author: Forge-OS maintainers
+  description: Forge-OS auditd role
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

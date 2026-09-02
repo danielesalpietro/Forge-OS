@@ -1,0 +1,7 @@
+---
+# forge_gitops: Flux/Argo CD bootstrap and cluster configuration repository wiring
+# Status: Phase 3 placeholder. See docs/PLAN.md for the deliverables and
+# acceptance criteria; implementation lands in the Phase 3 milestone.
+- name: "Placeholder for forge_gitops (Phase 3, not implemented yet)"
+  ansible.builtin.debug:
+    msg: "Flux/Argo CD bootstrap and cluster configuration repository wiring - not implemented yet (Phase 3); see docs/PLAN.md"

@@ -1,0 +1,54 @@
+---
+- name: Ensure openssh-server is installed
+  ansible.builtin.apt:
+    name: openssh-server
+    state: present
+
+- name: Ensure the RBAC groups referenced by AllowGroups exist
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+    system: true
+  loop: "{{ forge_ssh_allow_groups }}"
+
+- name: Ensure the initial admin is in the admin group
+  ansible.builtin.user:
+    name: "{{ forge_admin_user }}"
+    groups: "{{ forge_admin_group }}"
+    append: true
+  when: forge_admin_user | length > 0
+
+- name: Remove distro drop-ins that weaken the policy
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/50-cloud-init.conf
+    state: absent
+  notify: Restart sshd
+
+- name: Deploy Forge-OS sshd policy
+  ansible.builtin.template:
+    src: 00-forge.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-forge.conf
+    mode: "0600"
+    validate: "sshd -t -f %s"
+  notify: Restart sshd
+
+- name: Remove weak host keys (DSA, ECDSA)
+  ansible.builtin.file:
+    path: "/etc/ssh/ssh_host_{{ item }}_key"
+    state: absent
+  loop: [dsa, ecdsa]
+  notify: Restart sshd
+
+- name: Permissions on host keys
+  ansible.builtin.shell: |
+    set -o pipefail
+    chmod 0600 /etc/ssh/ssh_host_*_key && chmod 0644 /etc/ssh/ssh_host_*_key.pub
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Ensure sshd is enabled
+  ansible.builtin.service:
+    name: ssh
+    enabled: true
+  when: not forge_container_mode | default(false)

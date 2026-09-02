@@ -1,0 +1,30 @@
+---
+- name: Install TOTP and FIDO2 PAM modules
+  ansible.builtin.apt:
+    name: [libpam-google-authenticator, libpam-u2f]
+    state: present
+    install_recommends: false
+
+- name: Configure PAM for SSH (public key + TOTP)
+  ansible.builtin.blockinfile:
+    path: /etc/pam.d/sshd
+    marker: "# {mark} FORGE-OS MFA"
+    insertbefore: BOF
+    block: |
+      auth required pam_google_authenticator.so {{ 'nullok' if forge_mfa_nullok else '' }} echo_verification_code
+    state: "{{ 'present' if forge_mfa_enabled else 'absent' }}"
+
+- name: Disable password prompt in PAM for sshd when MFA is enabled
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/sshd
+    regexp: '^@include common-auth'
+    line: "{{ '#@include common-auth' if forge_mfa_enabled else '@include common-auth' }}"
+
+- name: MFA enrolment helper for users
+  ansible.builtin.copy:
+    dest: /usr/local/bin/forge-mfa-enrol
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Enrol the current user for TOTP (Google Authenticator / FreeOTP / etc.)
+      exec google-authenticator -t -d -f -r 3 -R 30 -W -e 5

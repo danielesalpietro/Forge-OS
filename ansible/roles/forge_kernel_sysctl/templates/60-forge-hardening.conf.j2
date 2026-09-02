@@ -1,0 +1,8 @@
+# Managed by Forge-OS (forge_kernel_sysctl). Override with forge_sysctl_overrides
+# or a higher-numbered file in /etc/sysctl.d (Phase 3 sets net.ipv4.ip_forward=1).
+{% for k, v in forge_kernel_sysctl_settings.items() %}
+{{ k }} = {{ v }}
+{% endfor %}
+{% for k, v in forge_sysctl_overrides.items() %}
+{{ k }} = {{ v }}
+{% endfor %}

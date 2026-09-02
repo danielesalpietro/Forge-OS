@@ -1,0 +1,63 @@
+---
+- name: Disable core dumps (systemd-coredump + limits)
+  ansible.builtin.copy:
+    dest: /etc/systemd/coredump.conf.d/forge.conf
+    mode: "0644"
+    content: |
+      [Coredump]
+      Storage=none
+      ProcessSizeMax=0
+
+- name: Hard limit on core files
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/forge-core.conf
+    mode: "0644"
+    content: "* hard core 0\n"
+
+- name: Configure system.conf defaults
+  ansible.builtin.copy:
+    dest: /etc/systemd/system.conf.d/forge.conf
+    mode: "0644"
+    content: |
+      [Manager]
+      DefaultLimitCORE=0
+      DumpCore=no
+      CrashShell=no
+      DefaultTimeoutStopSec=30s
+
+- name: Mask dangerous units
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+  loop: [ctrl-alt-del.target, debug-shell.service, kexec.target]
+  when: not forge_container_mode | default(false)
+
+- name: Drop-in directories for sandboxed services
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item.unit }}.d"
+    state: directory
+    mode: "0755"
+  loop: "{{ forge_systemd_dropins }}"
+  loop_control:
+    label: "{{ item.unit }}"
+  when: forge_systemd_dropins_enabled | bool
+
+- name: Service sandboxing drop-ins
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.unit }}.d/forge-hardening.conf"
+    mode: "0644"
+    content: "{{ item.content }}"
+  loop: "{{ forge_systemd_dropins }}"
+  loop_control:
+    label: "{{ item.unit }}"
+  notify: Reload systemd
+  when: forge_systemd_dropins_enabled | bool
+
+- name: /dev/shm hardened mount options
+  ansible.posix.mount:
+    path: /dev/shm
+    src: tmpfs
+    fstype: tmpfs
+    opts: defaults,nodev,nosuid,noexec,size=50%
+    state: mounted
+  when: not forge_container_mode | default(false)

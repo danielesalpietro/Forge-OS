@@ -1,0 +1,22 @@
+---
+- name: Kernel and network hardening sysctls
+  ansible.builtin.template:
+    src: 60-forge-hardening.conf.j2
+    dest: /etc/sysctl.d/60-forge-hardening.conf
+    mode: "0644"
+  notify: Reload sysctl
+
+- name: Blacklist unneeded filesystem and protocol modules
+  ansible.builtin.template:
+    src: forge-blacklist.conf.j2
+    dest: /etc/modprobe.d/forge-blacklist.conf
+    mode: "0644"
+
+- name: Kernel command line hardening (lockdown, AppArmor, page poisoning)
+  ansible.builtin.copy:
+    dest: /etc/default/grub.d/60-forge-hardening.cfg
+    mode: "0644"
+    content: |
+      GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX apparmor=1 security=apparmor lockdown=integrity init_on_alloc=1 init_on_free=1 slab_nomerge page_alloc.shuffle=1 randomize_kstack_offset=on vsyscall=none audit=1 audit_backlog_limit=8192"
+  notify: Update grub
+  when: not forge_container_mode | default(false)

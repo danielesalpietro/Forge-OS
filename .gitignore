@@ -427,3 +427,27 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# ---------------------------------------------------------------------------
+# Forge-OS build artefacts and local secrets
+# ---------------------------------------------------------------------------
+build/cache/
+build/work/
+build/out/
+build/test-kvm/
+build/packer-*/
+build/ci-key*
+build/test-key*
+ansible/vendor/
+ansible/.cache/
+*.iso
+*.qcow2
+*.retry
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/keys/.gitkeep
+pro-token
+luks-build-key

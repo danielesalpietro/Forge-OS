@@ -1,0 +1,5 @@
+# Managed by Forge-OS: AD groups granted local RBAC roles (via simple access + group override)
+[domain/{{ forge_ad_domain }}]
+{% if forge_ad_admin_groups | length > 0 or forge_ad_operator_groups | length > 0 %}
+simple_allow_groups = {{ (forge_ad_admin_groups + forge_ad_operator_groups) | join(', ') }}
+{% endif %}

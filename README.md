@@ -130,6 +130,43 @@ Optional integrations:
 
 ---
 
+## Repository layout and quick start
+
+The repository produces a **self-installing UEFI/Secure Boot ISO** for
+bare-metal (and VMs) that installs an encrypted, hardened Ubuntu 24.04 LTS
+and applies the security baseline at first boot. See
+[docs/PLAN.md](docs/PLAN.md) for the phased development plan and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
+
+```
+build/        ISO remastering pipeline (Dockerfile, scripts, package lists, GRUB menu)
+autoinstall/  subiquity autoinstall profiles: baseline, vm-dev, storage-node
+overlay/      first-boot service, late-install script, /etc/forge templates
+ansible/      hardening roles (Phase 1) and Phase 2/3 playbooks
+tests/        forge-validate suite, KVM e2e harness, Packer templates, VMware/Docker notes
+docs/         plan, architecture, control matrix, ADRs
+.github/      CI: lint, ISO build/release, nightly KVM end-to-end, molecule
+```
+
+```bash
+cp .env.example .env            # set FORGE_ADMIN_SSH_KEY (your public key)
+set -a; source .env; set +a
+make builder                    # builder container (xorriso, apt, ansible, linters)
+make iso PROFILE=baseline       # → build/out/forge-os-<version>-baseline-amd64.iso
+make lint                       # shellcheck / yamllint / ansible-lint / autoinstall schema
+tests/kvm/run-iso.sh build/out/forge-os-*-vm-dev-amd64.iso --ssh-key ~/.ssh/id_ed25519
+```
+
+Boot the ISO in UEFI mode with Secure Boot and TPM 2.0 enabled: the first GRUB
+entry erases the target disk and installs unattended. After two reboots log in
+with your SSH key and run `sudo forge-validate`.
+
+**Development environments:** Docker (build, lint, role development), KVM with
+OVMF + swtpm (reference for Secure Boot/TPM/LUKS tests, also in CI), VMware
+(parity), bare-metal (release gate). Details: [docs/DEV-ENVIRONMENTS.md](docs/DEV-ENVIRONMENTS.md).
+
+---
+
 ## Expected Outcome
 
 Forge-OS provides a reusable enterprise-grade operating system foundation that combines:

@@ -1,0 +1,9 @@
+---
+- name: Forge-OS | Phase 1 security baseline
+  ansible.builtin.import_playbook: baseline.yml
+
+- name: Forge-OS | Phase 2 storage and operations
+  ansible.builtin.import_playbook: storage.yml
+
+- name: Forge-OS | Phase 3 cloud-native platform
+  ansible.builtin.import_playbook: platform.yml

@@ -1,0 +1,6 @@
+---
+# Bare-metal baseline: strict defaults.
+forge_tpm_enroll: auto
+forge_cis_enabled: true
+forge_cis_level: 1
+forge_audit_immutable: true

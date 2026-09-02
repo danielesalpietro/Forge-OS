@@ -1,0 +1,10 @@
+---
+- name: Reload sysctl
+  ansible.builtin.command: sysctl --system
+  changed_when: true
+  when: not forge_container_mode | default(false)
+
+- name: Update grub
+  ansible.builtin.command: update-grub
+  changed_when: true
+  when: not forge_container_mode | default(false)

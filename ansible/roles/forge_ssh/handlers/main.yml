@@ -1,0 +1,6 @@
+---
+- name: Restart sshd
+  ansible.builtin.service:
+    name: ssh
+    state: restarted
+  when: not forge_container_mode | default(false)

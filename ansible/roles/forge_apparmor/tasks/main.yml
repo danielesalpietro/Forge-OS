@@ -1,0 +1,23 @@
+---
+- name: Install AppArmor and profiles
+  ansible.builtin.apt:
+    name: [apparmor, apparmor-utils, apparmor-profiles, apparmor-profiles-extra]
+    state: present
+    install_recommends: false
+
+- name: AppArmor service enabled
+  ansible.builtin.service:
+    name: apparmor
+    enabled: true
+    state: started
+  when: not forge_container_mode | default(false)
+
+- name: Enforce all installed profiles
+  ansible.builtin.shell: |
+    set -o pipefail
+    aa-enforce /etc/apparmor.d/* 2>&1 | grep -c 'Setting .* to enforce mode' || true
+  args:
+    executable: /bin/bash
+  register: forge_aa_enforce
+  changed_when: false
+  when: not forge_container_mode | default(false)

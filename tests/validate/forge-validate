@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# forge-validate - Forge-OS security baseline validation suite.
+# Runs on the installed system (root). Exit code 0 = all critical checks pass.
+#   forge-validate [--text|--json] [--tag tpm,luks,ssh,...] [--list]
+set -uo pipefail
+
+MODE=text
+TAGS=""
+declare -a RESULTS=()
+PASS=0; FAIL=0; WARN=0; SKIP=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json) MODE=json ;;
+    --text) MODE=text ;;
+    --tag)  TAGS="$2"; shift ;;
+    --list) MODE=list ;;
+    -h|--help) sed -n '2,6p' "$0"; exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+[[ "$(id -u)" == "0" || "${MODE}" == "list" ]] || { echo "run as root" >&2; exit 2; }
+[[ -r /etc/forge/forge.conf ]] && source /etc/forge/forge.conf
+
+# record <tag> <severity:critical|warn> <id> <status:pass|fail|warn|skip> <detail>
+record() {
+  local tag="$1" sev="$2" id="$3" status="$4" detail="${5:-}"
+  case "${status}" in pass) ((PASS++));; fail) ((FAIL++));; warn) ((WARN++));; skip) ((SKIP++));; esac
+  RESULTS+=("${tag}|${sev}|${id}|${status}|${detail}")
+}
+want() { [[ -z "${TAGS}" ]] || [[ ",${TAGS}," == *",$1,"* ]]; }
+# check <tag> <sev> <id> <command...> : pass if command succeeds
+check() {
+  local tag="$1" sev="$2" id="$3"; shift 3
+  want "${tag}" || return 0
+  local out
+  if out="$("$@" 2>&1)"; then
+    record "${tag}" "${sev}" "${id}" pass "${out%%$'\n'*}"
+  elif [[ "${sev}" == "critical" ]]; then
+    record "${tag}" "${sev}" "${id}" fail "${out%%$'\n'*}"
+  else
+    record "${tag}" "${sev}" "${id}" warn "${out%%$'\n'*}"
+  fi
+}
+skip() { want "$1" && record "$1" "$2" "$3" skip "${4:-}"; }
+
+sysctl_is() { local v; v="$(sysctl -n "$1" 2>/dev/null)" && [[ "${v}" == "$2" ]] || { echo "$1=${v:-unset} (want $2)"; return 1; }; }
+sshd_eff()  { sshd -T 2>/dev/null | awk -v k="$1" 'tolower($1)==k {print tolower($2); exit}'; }
+sshd_is()   { local v; v="$(sshd_eff "$1")"; [[ "${v}" == "$2" ]] || { echo "$1=${v:-unset} (want $2)"; return 1; }; }
+
+is_vm() { systemd-detect-virt -q 2>/dev/null; }
+root_src() { findmnt -no SOURCE / 2>/dev/null; }
+luks_dev() { awk '!/^#/ && NF>=2 {print $1; exit}' /etc/crypttab 2>/dev/null; }
+luks_backing() { local d; d="$(luks_dev)"; [[ -n "$d" ]] && cryptsetup status "$d" 2>/dev/null | awk '/device:/ {print $2}'; }
+
+# ---------------------------------------------------------------- hardware RoT
+if want rot; then
+  if [[ -d /sys/firmware/efi ]]; then
+    record rot critical uefi-boot pass "booted in UEFI mode"
+    if command -v mokutil >/dev/null 2>&1; then
+      if mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled'; then record rot critical secure-boot pass "SecureBoot enabled"
+      elif is_vm; then record rot critical secure-boot warn "SecureBoot disabled (VM)"
+      else record rot critical secure-boot fail "SecureBoot disabled"; fi
+    else record rot critical secure-boot fail "mokutil missing"; fi
+  else
+    record rot critical uefi-boot fail "legacy BIOS boot"
+    record rot critical secure-boot fail "not UEFI"
+  fi
+  if [[ -c /dev/tpmrm0 || -c /dev/tpm0 ]]; then
+    record rot critical tpm2-present pass "$(cat /sys/class/tpm/tpm0/tpm_version_major 2>/dev/null | sed 's/^/TPM version /')"
+    check rot critical tpm2-usable tpm2_getcap properties-fixed
+    check rot critical measured-boot bash -c 'v=$(tpm2_pcrread sha256:7 2>/dev/null | awk "/7 *:/ {print \$3}"); [[ -n "$v" && "$v" != 0x0000000000000000000000000000000000000000000000000000000000000000 ]] && echo "PCR7=$v"'
+    check rot warn tpm-eventlog test -r /sys/kernel/security/tpm0/binary_bios_measurements
+  else
+    if is_vm; then record rot critical tpm2-present warn "no TPM (VM without vTPM)"; else record rot critical tpm2-present fail "no TPM 2.0 device"; fi
+    skip rot critical tpm2-usable "no TPM"; skip rot critical measured-boot "no TPM"
+  fi
+fi
+
+# ------------------------------------------------------------------ encryption
+if want luks; then
+  dev="$(luks_dev)"
+  if [[ -n "${dev}" ]]; then
+    record luks critical luks-configured pass "crypttab: ${dev}"
+    backing="$(luks_backing)"
+    check luks critical luks2-format bash -c "cryptsetup luksDump '${backing}' | grep -q 'Version:.*2' && echo LUKS2"
+    check luks critical aes256-xts bash -c "cryptsetup status '${dev}' | grep -q 'cipher:.*aes-xts-plain64' && cryptsetup status '${dev}' | grep -q 'keysize:.*512 bits' && echo 'aes-xts-plain64 512-bit'"
+    check luks critical root-on-luks bash -c "lsblk -no TYPE,NAME \$(findmnt -no SOURCE /) -s | grep -q crypt && echo 'root inside LUKS'"
+    check luks critical swap-encrypted bash -c "s=\$(awk 'NR>1 {print \$1}' /proc/swaps | head -1); [[ -z \"\$s\" ]] && { echo 'no swap'; exit 0; }; lsblk -no TYPE \"\$s\" -s | grep -q crypt && echo \"swap \$s encrypted\""
+    check luks critical build-key-removed bash -c '! test -e /etc/forge/luks-build-key && echo removed'
+    if [[ "${FORGE_TPM_ENROLL:-auto}" != "no" ]] && [[ -c /dev/tpmrm0 || -c /dev/tpm0 ]]; then
+      check luks critical tpm2-bound bash -c "clevis luks list -d '${backing}' | grep -q tpm2 && echo 'clevis tpm2 binding present'"
+      check luks warn tpm2-initramfs bash -c "lsinitramfs /boot/initrd.img-\$(uname -r) | grep -q clevis && echo 'clevis in initramfs'"
+    else skip luks critical tpm2-bound "TPM enrolment disabled or no TPM"; fi
+    check luks warn recovery-key-stored test -s /root/forge-recovery-key
+  else
+    record luks critical luks-configured fail "no LUKS device in /etc/crypttab"
+  fi
+fi
+
+# ------------------------------------------------------------- os hardening
+if want os; then
+  check os critical apparmor-enforced bash -c 'aa-status --enabled && n=$(aa-status --enforced 2>/dev/null); [[ ${n:-0} -gt 0 ]] && echo "$n profiles enforced"'
+  check os critical auditd-active systemctl is-active auditd
+  check os warn auditd-rules bash -c 'n=$(auditctl -l 2>/dev/null | wc -l); [[ $n -gt 20 ]] && echo "$n rules loaded"'
+  check os critical nftables-active systemctl is-active nftables
+  check os critical nftables-input-drop bash -c 'nft list chain inet forge input 2>/dev/null | grep -q "policy drop" && echo "input policy drop"'
+  check os critical fail2ban-active systemctl is-active fail2ban
+  check os critical unattended-upgrades bash -c 'systemctl is-enabled apt-daily-upgrade.timer >/dev/null && grep -qs "Unattended-Upgrade \"1\"" /etc/apt/apt.conf.d/20auto-upgrades && echo enabled'
+  check os warn ufw-absent bash -c '! dpkg -s ufw >/dev/null 2>&1 && echo absent'
+  check os critical sysctl-aslr sysctl_is kernel.randomize_va_space 2
+  check os critical sysctl-kptr sysctl_is kernel.kptr_restrict 2
+  check os critical sysctl-dmesg sysctl_is kernel.dmesg_restrict 1
+  check os critical sysctl-ptrace sysctl_is kernel.yama.ptrace_scope 1
+  check os critical sysctl-bpf sysctl_is kernel.unprivileged_bpf_disabled 1
+  check os critical sysctl-rp-filter sysctl_is net.ipv4.conf.all.rp_filter 1
+  check os critical sysctl-redirects sysctl_is net.ipv4.conf.all.accept_redirects 0
+  check os warn sysctl-syncookies sysctl_is net.ipv4.tcp_syncookies 1
+  check os warn tmp-noexec bash -c 'findmnt -no OPTIONS /tmp | grep -q noexec && echo noexec'
+  check os warn var-tmp-noexec bash -c 'findmnt -no OPTIONS /var/tmp | grep -q noexec && echo noexec'
+  check os warn separate-var-log-audit findmnt -n /var/log/audit
+  check os warn coredump-disabled bash -c 'grep -qs "^Storage=none" /etc/systemd/coredump.conf.d/*.conf /etc/systemd/coredump.conf && echo disabled'
+  check os warn ctrl-alt-del-masked bash -c '[[ "$(systemctl is-enabled ctrl-alt-del.target 2>/dev/null)" == masked ]] && echo masked'
+  check os warn chrony-active systemctl is-active chrony
+  check os warn forge-release test -r /etc/forge-release
+fi
+
+# ------------------------------------------------------ administrative access
+if want admin; then
+  check admin critical root-locked bash -c 'passwd -S root | grep -qE " L[K ]?" && echo locked'
+  check admin critical sshd-no-root sshd_is permitrootlogin no
+  check admin critical sshd-no-password sshd_is passwordauthentication no
+  check admin critical sshd-pubkey sshd_is pubkeyauthentication yes
+  check admin critical sshd-no-empty-pw sshd_is permitemptypasswords no
+  check admin warn sshd-maxauthtries bash -c 'v=$(sshd_eff maxauthtries); [[ ${v:-99} -le 4 ]] && echo "MaxAuthTries=$v"'
+  check admin warn sshd-loglevel sshd_is loglevel verbose
+  check admin warn sshd-x11 sshd_is x11forwarding no
+  check admin warn sshd-allowgroups bash -c 'v=$(sshd_eff allowgroups); [[ -n "$v" ]] && echo "AllowGroups=$v"'
+  check admin critical sudo-groups bash -c 'getent group forge-admin >/dev/null && getent group forge-operator >/dev/null && echo "forge-admin, forge-operator"'
+  check admin critical sudo-io-logging bash -c 'sudo -V | grep -q "I/O logging" ; grep -rqs "log_output" /etc/sudoers /etc/sudoers.d && echo "sudo I/O logging"'
+  check admin warn sudo-syntax visudo -c
+  check admin warn pam-tty-audit bash -c 'grep -qs pam_tty_audit /etc/pam.d/common-session && echo enabled'
+  if [[ "${FORGE_IDENTITY_BACKEND:-none}" != "none" ]]; then
+    check admin critical sssd-active systemctl is-active sssd
+  else skip admin critical sssd-active "identity backend: none"; fi
+  check admin warn mfa-module bash -c 'dpkg -s libpam-google-authenticator >/dev/null 2>&1 && echo installed'
+fi
+
+# ------------------------------------------------------------------- pro
+if want pro; then
+  if command -v pro >/dev/null 2>&1; then
+    if pro status --format json 2>/dev/null | jq -e '.attached == true' >/dev/null 2>&1; then
+      record pro warn ubuntu-pro-attached pass "attached"
+      check pro warn esm-infra bash -c 'pro status --format json | jq -e ".services[] | select(.name==\"esm-infra\" and .status==\"enabled\")" >/dev/null && echo enabled'
+    else record pro warn ubuntu-pro-attached warn "not attached (no token provided)"; fi
+  else record pro warn ubuntu-pro-attached warn "ubuntu-pro-client missing"; fi
+fi
+
+# ------------------------------------------------------------------ output
+total=$((PASS+FAIL+WARN+SKIP))
+summary="pass=${PASS} fail=${FAIL} warn=${WARN} skip=${SKIP} total=${total}"
+case "${MODE}" in
+  list)
+    printf '%s\n' "${RESULTS[@]}" | cut -d'|' -f1,3 | sort -u ;;
+  json)
+    {
+      printf '{"forge_version":"%s","profile":"%s","hostname":"%s","timestamp":"%s","summary":"%s",' \
+        "${FORGE_VERSION:-}" "${FORGE_PROFILE:-}" "$(hostname)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${summary}"
+      printf '"pass":%d,"fail":%d,"warn":%d,"skip":%d,"checks":[' "${PASS}" "${FAIL}" "${WARN}" "${SKIP}"
+      first=1
+      for r in "${RESULTS[@]}"; do
+        IFS='|' read -r tag sev id status detail <<<"${r}"
+        detail="${detail//\\/\\\\}"; detail="${detail//\"/\\\"}"
+        [[ ${first} -eq 1 ]] || printf ','
+        printf '{"tag":"%s","severity":"%s","id":"%s","status":"%s","detail":"%s"}' "${tag}" "${sev}" "${id}" "${status}" "${detail}"
+        first=0
+      done
+      printf ']}\n'
+    } ;;
+  text)
+    printf 'Forge-OS validation - %s - %s\n' "$(hostname)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '%-7s %-9s %-24s %s\n' STATUS TAG CHECK DETAIL
+    for r in "${RESULTS[@]}"; do
+      IFS='|' read -r tag sev id status detail <<<"${r}"
+      case "${status}" in pass) c='\033[32m';; fail) c='\033[31m';; warn) c='\033[33m';; *) c='\033[90m';; esac
+      printf "${c}%-7s\033[0m %-9s %-24s %s\n" "${status^^}" "${tag}" "${id}" "${detail}"
+    done
+    printf '\n%s\n' "${summary}" ;;
+esac
+[[ ${FAIL} -eq 0 ]]

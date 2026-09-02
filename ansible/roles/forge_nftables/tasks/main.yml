@@ -1,0 +1,26 @@
+---
+- name: Install nftables, remove ufw/iptables-persistent
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+
+- name: Drop-in directory for other roles (ceph, k8s, monitoring)
+  ansible.builtin.file:
+    path: /etc/nftables.d
+    state: directory
+    mode: "0750"
+
+- name: Base ruleset (default deny inbound)
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0640"
+    validate: "nft -c -f %s"
+  notify: Reload nftables
+
+- name: Ensure nftables is enabled and started
+  ansible.builtin.service:
+    name: nftables
+    enabled: true
+    state: started
+  when: not forge_container_mode | default(false)

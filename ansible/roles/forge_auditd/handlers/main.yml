@@ -1,0 +1,6 @@
+---
+- name: Restart auditd
+  ansible.builtin.command: augenrules --load
+  changed_when: true
+  failed_when: false
+  when: not forge_container_mode | default(false)

@@ -1,0 +1,2 @@
+Drop *.conf files here (KEY=VALUE, shell syntax) to override /etc/forge/forge.conf
+for a single node before the first boot completes, e.g. from a provisioning hook.

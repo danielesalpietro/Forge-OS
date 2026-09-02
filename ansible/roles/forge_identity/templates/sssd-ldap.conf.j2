@@ -1,0 +1,23 @@
+# Managed by Forge-OS (forge_identity, backend=ldap)
+[sssd]
+domains = ldap
+config_file_version = 2
+services = nss, pam
+
+[domain/ldap]
+id_provider = ldap
+auth_provider = ldap
+access_provider = ldap
+ldap_uri = {{ forge_ldap_uri }}
+ldap_search_base = {{ forge_ldap_search_base }}
+{% if forge_ldap_bind_dn %}
+ldap_default_bind_dn = {{ forge_ldap_bind_dn }}
+ldap_default_authtok = {{ forge_ldap_bind_password }}
+{% endif %}
+ldap_tls_reqcert = demand
+ldap_tls_cacert = {{ forge_ldap_tls_cacert }}
+ldap_id_use_start_tls = True
+cache_credentials = True
+enumerate = False
+default_shell = /bin/bash
+fallback_homedir = /home/%u

@@ -1,0 +1,4 @@
+---
+# On an installed node the script is already in /opt/forge/validate (from the ISO).
+forge_validate_source: /opt/forge/validate/forge-validate
+forge_validate_remote_src: true

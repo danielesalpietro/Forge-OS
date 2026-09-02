@@ -1,0 +1,7 @@
+---
+- name: SSSD LDAP configuration
+  ansible.builtin.template:
+    src: sssd-ldap.conf.j2
+    dest: /etc/sssd/sssd.conf
+    mode: "0600"
+  notify: Restart sssd

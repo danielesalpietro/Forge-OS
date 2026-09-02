@@ -1,0 +1,16 @@
+# Managed by Forge-OS (forge_fail2ban)
+[DEFAULT]
+backend = systemd
+banaction = nftables-multiport
+banaction_allports = nftables-allports
+bantime = 1h
+bantime.increment = true
+bantime.maxtime = 1w
+findtime = 10m
+maxretry = 5
+ignoreip = 127.0.0.1/8 ::1 {{ forge_ssh_allowed_cidrs | join(' ') }}
+
+[sshd]
+enabled = true
+port = {{ forge_ssh_port }}
+mode = aggressive

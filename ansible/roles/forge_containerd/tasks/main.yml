@@ -1,0 +1,7 @@
+---
+# forge_containerd: containerd with CIS-aligned configuration, image signature verification
+# Status: Phase 3 placeholder. See docs/PLAN.md for the deliverables and
+# acceptance criteria; implementation lands in the Phase 3 milestone.
+- name: "Placeholder for forge_containerd (Phase 3, not implemented yet)"
+  ansible.builtin.debug:
+    msg: "containerd with CIS-aligned configuration, image signature verification - not implemented yet (Phase 3); see docs/PLAN.md"

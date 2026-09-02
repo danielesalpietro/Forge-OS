@@ -1,0 +1,11 @@
+#!/bin/sh
+# /etc/update-motd.d/00-forge
+[ -r /etc/forge-release ] && . /etc/forge-release
+printf '\n  Forge-OS %s (%s) - profile %s - base %s\n' "${FORGE_VERSION:-?}" "${FORGE_CODENAME:-?}" "${FORGE_PROFILE:-?}" "${FORGE_BASE:-?}"
+if [ -f /var/lib/forge/firstboot.done ]; then
+  printf '  Baseline applied: %s   Validation: %s\n' "$(cat /var/lib/forge/firstboot.done)" \
+    "$(command -v jq >/dev/null 2>&1 && jq -r '.summary // "n/a"' /var/lib/forge/validation-report.json 2>/dev/null || echo n/a)"
+else
+  printf '  WARNING: first-boot hardening has NOT completed (see journalctl -u forge-firstboot)\n'
+fi
+printf '  This system is monitored. Unauthorised access is prohibited.\n\n'

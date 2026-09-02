@@ -1,0 +1,28 @@
+name: Bug report
+description: Something is broken in the build, the installer or the baseline
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Forge-OS version / ISO manifest (build/out/*.manifest.json)
+    validations:
+      required: true
+  - type: dropdown
+    id: env
+    attributes:
+      label: Environment
+      options: [Docker builder, KVM, VMware, Bare-metal]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened / expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (serial console, /var/log/forge/*, forge-validate --json)
+      render: shell

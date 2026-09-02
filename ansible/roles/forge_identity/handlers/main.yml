@@ -1,0 +1,6 @@
+---
+- name: Restart sssd
+  ansible.builtin.service:
+    name: sssd
+    state: restarted
+  when: not forge_container_mode | default(false)

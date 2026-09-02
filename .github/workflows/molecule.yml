@@ -1,0 +1,23 @@
+name: Ansible roles (molecule, docker)
+
+on:
+  pull_request:
+    paths: ["ansible/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  molecule:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install molecule
+        run: pip install "molecule>=24" "molecule-plugins[docker]" ansible-core ansible-lint
+      - name: Run container scenario
+        working-directory: ansible
+        run: molecule test -s container

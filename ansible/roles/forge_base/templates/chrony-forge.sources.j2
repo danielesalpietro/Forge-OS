@@ -1,0 +1,4 @@
+# Managed by Forge-OS (forge_base)
+{% for s in forge_ntp_servers %}
+pool {{ s }} iburst maxsources 4
+{% endfor %}

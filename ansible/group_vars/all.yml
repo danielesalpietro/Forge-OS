@@ -1,0 +1,63 @@
+---
+# Forge-OS defaults (Phase 1). Profiles (ansible/profiles/*.yml) and the node's
+# /etc/forge/ansible-extra-vars.yml override these.
+forge_profile: baseline
+forge_admin_user: forge
+forge_admin_group: forge-admin
+forge_operator_group: forge-operator
+
+# --- hardware root of trust / encryption ---
+forge_tpm_enroll: auto          # auto | yes | no
+forge_tpm_pcrs: "7"             # e.g. "0,2,7"
+forge_tang_urls: ""             # "http://tang1:8080,http://tang2:8080"
+forge_tang_threshold: 1
+forge_recovery_key_path: /root/forge-recovery-key
+forge_luks_build_key_path: /etc/forge/luks-build-key
+
+# --- OS hardening ---
+forge_cis_enabled: true
+forge_cis_level: 1
+forge_audit_immutable: true
+forge_sysctl_overrides: {}
+forge_blacklist_modules: [cramfs, freevxfs, jffs2, hfs, hfsplus, udf, dccp, sctp, rds, tipc]
+forge_usb_storage_blocked: false
+forge_auto_reboot: false
+forge_auto_reboot_time: "03:30"
+forge_timezone: Etc/UTC
+forge_ntp_servers: [ntp.ubuntu.com]
+forge_remote_syslog: ""         # "udp://siem.example.com:514" (Phase 2 monitoring)
+
+# --- network / firewall ---
+forge_ssh_port: 22
+forge_ssh_allowed_cidrs: []     # empty = any source
+forge_nftables_extra_input_rules: []   # raw nft rules appended to the input chain
+forge_nftables_output_policy: accept   # accept | drop (Level 2)
+
+# --- administrative access ---
+forge_ssh_allow_groups: [forge-admin, forge-operator]
+forge_ssh_banner: /etc/issue.net
+forge_mfa_enabled: false        # TOTP (pam_google_authenticator) for SSH; enrol users first
+forge_mfa_nullok: true          # allow users without a TOTP secret while onboarding
+forge_identity_backend: none    # none | ad | ldap
+forge_ad_domain: ""
+forge_ad_admin_groups: []       # AD groups mapped to forge-admin
+forge_ad_operator_groups: []
+forge_ldap_uri: ""
+forge_ldap_search_base: ""
+forge_ldap_bind_dn: ""
+forge_ldap_bind_password: ""
+forge_ldap_tls_cacert: /etc/ssl/certs/ca-certificates.crt
+
+# --- Ubuntu Pro ---
+forge_pro_enabled: true
+forge_pro_token_file: /etc/forge/pro-token
+forge_pro_token: ""
+forge_pro_services: [esm-infra, esm-apps, livepatch, usg]
+
+# --- Phase 2 / 3 switches (roles are stubs until those phases start) ---
+forge_storage_enabled: false
+forge_monitoring_enabled: false
+forge_backup_enabled: false
+forge_k8s_enabled: false
+forge_gpu_enabled: false
+forge_gitops_enabled: false

@@ -1,0 +1,7 @@
+---
+# forge_ceph: MicroCeph/Ceph cluster bootstrap with erasure-coded pools (4+2, 8+3) and encrypted OSDs
+# Status: Phase 2 placeholder. See docs/PLAN.md for the deliverables and
+# acceptance criteria; implementation lands in the Phase 2 milestone.
+- name: "Placeholder for forge_ceph (Phase 2, not implemented yet)"
+  ansible.builtin.debug:
+    msg: "MicroCeph/Ceph cluster bootstrap with erasure-coded pools (4+2, 8+3) and encrypted OSDs - not implemented yet (Phase 2); see docs/PLAN.md"

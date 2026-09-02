@@ -1,0 +1,22 @@
+---
+# CIS Ubuntu 24.04 Benchmark remediation via ansible-lockdown UBUNTU24-CIS,
+# vendored at ISO build time (ansible/vendor/roles/ubuntu24_cis).
+- name: Check that the CIS role is vendored
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../vendor/roles/ubuntu24_cis/tasks/main.yml"
+  register: forge_cis_role
+
+- name: Skip CIS remediation
+  ansible.builtin.debug:
+    msg: "CIS role skipped (forge_cis_enabled={{ forge_cis_enabled }}, vendored={{ forge_cis_role.stat.exists }})"
+  when: not forge_cis_enabled | bool or not forge_cis_role.stat.exists or forge_container_mode | default(false)
+
+- name: Load variables for the CIS role (vars/cis.yml)
+  ansible.builtin.include_vars:
+    file: cis.yml
+  when: forge_cis_enabled | bool and forge_cis_role.stat.exists and not forge_container_mode | default(false)
+
+- name: Apply CIS Level {{ forge_cis_level }} (server)
+  ansible.builtin.include_role:
+    name: ubuntu24_cis
+  when: forge_cis_enabled | bool and forge_cis_role.stat.exists and not forge_container_mode | default(false)

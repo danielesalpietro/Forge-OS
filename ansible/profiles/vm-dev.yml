@@ -1,0 +1,7 @@
+---
+# Development VMs: keep the same controls but tolerate missing TPM/Secure Boot
+# and avoid the CIS role (slow, and it fights with dev tooling) unless asked.
+forge_tpm_enroll: auto
+forge_cis_enabled: false
+forge_audit_immutable: false
+forge_auto_reboot: false

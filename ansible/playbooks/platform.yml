@@ -1,0 +1,11 @@
+---
+- name: Forge-OS cloud-native platform (Phase 3)
+  hosts: all
+  become: true
+  vars_files:
+    - "../profiles/{{ forge_profile | default('baseline') }}.yml"
+  roles:
+    - {role: forge_containerd, tags: [k8s, containerd], when: forge_k8s_enabled | bool}
+    - {role: forge_k3s, tags: [k8s], when: forge_k8s_enabled | bool}
+    - {role: forge_gpu, tags: [gpu], when: forge_gpu_enabled | bool}
+    - {role: forge_gitops, tags: [gitops], when: forge_gitops_enabled | bool}

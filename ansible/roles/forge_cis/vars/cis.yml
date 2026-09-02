@@ -1,0 +1,12 @@
+---
+# Variables handed to the vendored ansible-lockdown UBUNTU24-CIS role.
+# Variable names follow that role's defaults/main.yml; reconcile them with the
+# pinned version when Phase 1.3 lands (they are validated in the KVM e2e test).
+# Controls already owned by Forge-OS roles (sshd, nftables, auditd, /tmp,
+# /dev/shm) must stay disabled here to avoid double management.
+ubtu24cis_level_1: true
+ubtu24cis_level_2: "{{ forge_cis_level | int >= 2 }}"
+ubtu24cis_firewall_package: nftables
+ubtu24cis_sshd_allow_groups: "{{ forge_ssh_allow_groups | join(' ') }}"
+ubtu24cis_disruption_high: true
+ubtu24cis_allow_reboot: false

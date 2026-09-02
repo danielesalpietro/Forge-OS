@@ -1,0 +1,19 @@
+[Unit]
+Description=Forge-OS first-boot hardening (Ansible baseline, TPM enrolment, validation)
+Documentation=https://github.com/danielesalpietro/Forge-OS
+ConditionPathExists=!/var/lib/forge/firstboot.done
+After=network-online.target systemd-tmpfiles-setup.service
+Wants=network-online.target
+# SSH stays down until the baseline is applied.
+Before=ssh.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=0
+ExecStart=/usr/local/sbin/forge-firstboot
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

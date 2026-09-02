@@ -1,0 +1,7 @@
+---
+# forge_k3s: K3s (default) or kubeadm control plane/worker bootstrap with hardened profiles
+# Status: Phase 3 placeholder. See docs/PLAN.md for the deliverables and
+# acceptance criteria; implementation lands in the Phase 3 milestone.
+- name: "Placeholder for forge_k3s (Phase 3, not implemented yet)"
+  ansible.builtin.debug:
+    msg: "K3s (default) or kubeadm control plane/worker bootstrap with hardened profiles - not implemented yet (Phase 3); see docs/PLAN.md"

@@ -1,0 +1,60 @@
+---
+- name: RBAC groups
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+    system: true
+  loop: ["{{ forge_admin_group }}", "{{ forge_operator_group }}"]
+
+- name: Lock the root account
+  ansible.builtin.user:
+    name: root
+    password_lock: true
+
+- name: Remove the distro sudo group grant (RBAC groups only)
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers
+    regexp: '^%(sudo|admin)\s'
+    state: absent
+    validate: "visudo -cf %s"
+
+- name: Sudo defaults (session recording, logging, hardening)
+  ansible.builtin.template:
+    src: 00-forge-defaults.j2
+    dest: /etc/sudoers.d/00-forge-defaults
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Sudo RBAC policy (admin = full, operator = least privilege)
+  ansible.builtin.template:
+    src: 10-forge-rbac.j2
+    dest: /etc/sudoers.d/10-forge-rbac
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Remove cloud-init generated sudoers for the initial user (RBAC group covers it)
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/90-cloud-init-users"
+    state: absent
+
+- name: Session I/O log directory
+  ansible.builtin.file:
+    path: /var/log/sudo-io
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Audit every TTY session (pam_tty_audit)
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/common-session
+    line: "session required pam_tty_audit.so enable=*"
+    insertafter: EOF
+  when: not forge_container_mode | default(false)
+
+- name: Restrict su to the admin group (pam_wheel)
+  ansible.builtin.lineinfile:
+    path: /etc/pam.d/su
+    regexp: '^auth\s+required\s+pam_wheel.so'
+    line: "auth required pam_wheel.so use_uid group={{ forge_admin_group }}"
+    insertafter: '^# auth\s+required\s+pam_wheel.so'

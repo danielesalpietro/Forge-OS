@@ -1,0 +1,29 @@
+---
+# Container-safe scenario for role sub-development (no kernel/TPM/firmware).
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ../../requirements.yml
+driver:
+  name: docker
+platforms:
+  - name: forge-noble
+    image: ubuntu:24.04
+    pre_build_image: false
+    command: /lib/systemd/systemd
+    privileged: true
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+provisioner:
+  name: ansible
+  inventory:
+    group_vars:
+      all:
+        forge_profile: vm-dev
+        forge_container_mode: true
+        forge_is_vm: true
+  playbooks:
+    converge: converge.yml
+verifier:
+  name: ansible

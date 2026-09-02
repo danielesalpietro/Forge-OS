@@ -1,0 +1,94 @@
+---
+- name: Ensure Forge-OS directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop: [/etc/forge, /var/lib/forge, /var/log/forge]
+
+- name: Install baseline packages
+  ansible.builtin.apt:
+    name: "{{ forge_base_packages }}"
+    state: present
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Remove packages that conflict with the baseline
+  ansible.builtin.apt:
+    name: "{{ forge_base_remove_packages }}"
+    state: absent
+    purge: true
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ forge_timezone }}"
+  when: not forge_container_mode | default(false)
+
+- name: Configure chrony NTP servers
+  ansible.builtin.template:
+    src: chrony-forge.sources.j2
+    dest: /etc/chrony/sources.d/forge.sources
+    mode: "0644"
+  notify: Restart chrony
+
+- name: Persistent, size-bounded journal
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/forge.conf
+    mode: "0644"
+    content: |
+      [Journal]
+      Storage=persistent
+      Compress=yes
+      SystemMaxUse=2G
+      ForwardToSyslog=yes
+  notify: Restart journald
+
+- name: Login banners
+  ansible.builtin.copy:
+    dest: "{{ item }}"
+    mode: "0644"
+    content: |
+      Forge-OS - authorised access only. All activity is logged and audited.
+  loop: [/etc/issue, /etc/issue.net]
+
+- name: Password quality policy (local accounts)
+  ansible.builtin.copy:
+    dest: /etc/security/pwquality.conf.d/forge.conf
+    mode: "0644"
+    content: |
+      minlen = 14
+      minclass = 4
+      maxrepeat = 3
+      dictcheck = 1
+      enforce_for_root
+
+- name: Login definitions (aging, umask)
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: "^{{ item.key }}\\s"
+    line: "{{ item.key }} {{ item.value }}"
+  loop:
+    - {key: PASS_MAX_DAYS, value: "365"}
+    - {key: PASS_MIN_DAYS, value: "1"}
+    - {key: PASS_WARN_AGE, value: "14"}
+    - {key: UMASK, value: "027"}
+    - {key: ENCRYPT_METHOD, value: SHA512}
+
+- name: Default umask and shell timeout
+  ansible.builtin.copy:
+    dest: /etc/profile.d/forge-hardening.sh
+    mode: "0644"
+    content: |
+      umask 027
+      TMOUT=900; readonly TMOUT; export TMOUT
+
+- name: Process accounting and sysstat enabled
+  ansible.builtin.service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: [acct, sysstat]
+  when: not forge_container_mode | default(false)

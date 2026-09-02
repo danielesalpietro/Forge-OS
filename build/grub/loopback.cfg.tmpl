@@ -1,0 +1,11 @@
+# Used when the ISO is loop-mounted by another GRUB (e.g. Ventoy / grml).
+menuentry "Forge-OS ${FORGE_VERSION} - Automated install (${PROFILE}) [ERASES TARGET DISK]" {
+	set gfxpayload=keep
+	linux	/casper/vmlinuz iso-scan/filename=${iso_path} autoinstall ds=nocloud\;s=/cdrom/forge/autoinstall/ ${FORGE_KERNEL_ARGS} ---
+	initrd	/casper/initrd
+}
+menuentry "Ubuntu Server - manual (interactive) install" {
+	set gfxpayload=keep
+	linux	/casper/vmlinuz iso-scan/filename=${iso_path} ${FORGE_KERNEL_ARGS} ---
+	initrd	/casper/initrd
+}

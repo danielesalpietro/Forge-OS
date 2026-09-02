@@ -1,0 +1,29 @@
+---
+- name: End role when no identity backend is configured
+  ansible.builtin.meta: end_role
+  when: forge_identity_backend == 'none'
+
+- name: Install SSSD stack
+  ansible.builtin.apt:
+    name: [sssd, sssd-tools, libnss-sss, libpam-sss, oddjob, oddjob-mkhomedir, realmd, adcli, krb5-user, sssd-ad, sssd-ldap]
+    state: present
+    install_recommends: false
+
+- name: Active Directory join (realm)
+  ansible.builtin.include_tasks: ad.yml
+  when: forge_identity_backend == 'ad'
+
+- name: LDAP configuration
+  ansible.builtin.include_tasks: ldap.yml
+  when: forge_identity_backend == 'ldap'
+
+- name: Enable home directory creation
+  ansible.builtin.command: pam-auth-update --enable mkhomedir
+  changed_when: false
+
+- name: Ensure sssd is enabled
+  ansible.builtin.service:
+    name: sssd
+    enabled: true
+    state: started
+  when: not forge_container_mode | default(false)

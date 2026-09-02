@@ -1,0 +1,130 @@
+---
+# TPM2-bound LUKS unlock (clevis) + build-key rotation + recovery key.
+- name: Install clevis / TPM tooling
+  ansible.builtin.apt:
+    name: [clevis, clevis-luks, clevis-tpm2, clevis-initramfs, clevis-systemd, tpm2-tools, cryptsetup-initramfs]
+    state: present
+    install_recommends: false
+
+- name: Read crypttab
+  ansible.builtin.slurp:
+    path: /etc/crypttab
+  register: forge_crypttab
+  failed_when: false
+
+- name: Locate the LUKS volume
+  ansible.builtin.set_fact:
+    forge_luks_name: "{{ (forge_crypttab.content | default('') | b64decode | regex_findall('^([^#\\s]+)\\s', multiline=True) | first) | default('') }}"
+
+- name: Skip when there is no LUKS volume (container / unencrypted dev box)
+  ansible.builtin.meta: end_role
+  when: forge_luks_name | length == 0 or forge_container_mode | default(false)
+
+- name: Resolve backing block device
+  ansible.builtin.shell: |
+    set -o pipefail
+    cryptsetup status "{{ forge_luks_name }}" | awk '/device:/ {print $2}'
+  args:
+    executable: /bin/bash
+  register: forge_luks_dev
+  changed_when: false
+
+- name: Probe TPM device and build key
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: [/dev/tpmrm0, "{{ forge_luks_build_key_path }}"]
+  register: forge_luks_probe
+
+- name: Detect TPM 2.0 and build key
+  ansible.builtin.set_fact:
+    forge_has_tpm: "{{ forge_luks_probe.results[0].stat.exists }}"
+    forge_has_luks_build_key: "{{ forge_luks_probe.results[1].stat.exists }}"
+
+- name: Secure Boot state
+  ansible.builtin.command: mokutil --sb-state
+  register: forge_sb
+  changed_when: false
+  failed_when: false
+
+- name: Fail when TPM enrolment is mandatory but no TPM is present
+  ansible.builtin.fail:
+    msg: "forge_tpm_enroll=yes but no TPM 2.0 device (/dev/tpmrm0) was found"
+  when: forge_tpm_enroll | string == 'yes' and not forge_has_tpm
+
+- name: Decide whether to enrol
+  ansible.builtin.set_fact:
+    forge_do_tpm_enroll: "{{ forge_tpm_enroll | string != 'no' and forge_has_tpm and forge_has_luks_build_key }}"
+
+- name: Existing clevis bindings
+  ansible.builtin.command: clevis luks list -d {{ forge_luks_dev.stdout }}
+  register: forge_clevis_list
+  changed_when: false
+  failed_when: false
+
+- name: TPM2 pin configuration
+  ansible.builtin.set_fact:
+    forge_clevis_tpm_cfg:
+      pcr_bank: sha256
+      pcr_ids: "{{ forge_tpm_pcrs | string }}"
+
+- name: Clevis pin (tpm2 only)
+  ansible.builtin.set_fact:
+    forge_clevis_pin: tpm2
+    forge_clevis_cfg: "{{ forge_clevis_tpm_cfg | to_json }}"
+  when: forge_tang_urls | length == 0
+
+- name: Clevis pin (Shamir secret sharing, tpm2 + Tang remote escrow)
+  ansible.builtin.set_fact:
+    forge_clevis_pin: sss
+    forge_clevis_cfg: "{{ {'t': forge_tang_threshold | int, 'pins': {'tpm2': forge_clevis_tpm_cfg, 'tang': forge_tang_list}} | to_json }}"
+  vars:
+    forge_tang_list: "{{ forge_tang_urls.split(',') | map('trim') | map('community.general.dict_kv', 'url') | list }}"
+  when: forge_tang_urls | length > 0
+
+- name: Bind LUKS volume to TPM2 (PCRs {{ forge_tpm_pcrs }}){{ ' + Tang escrow' if forge_tang_urls | length > 0 else '' }}
+  ansible.builtin.command: >-
+    clevis luks bind -y -k {{ forge_luks_build_key_path }} -d {{ forge_luks_dev.stdout }}
+    {{ forge_clevis_pin }} '{{ forge_clevis_cfg }}'
+  when: forge_do_tpm_enroll and ('tpm2' not in forge_clevis_list.stdout)
+  register: forge_clevis_bind
+  changed_when: true
+  notify: Update initramfs
+
+- name: Generate recovery key
+  ansible.builtin.shell: |
+    set -o pipefail
+    umask 077
+    openssl rand -base64 48 | tr -d '\n' > {{ forge_recovery_key_path }}
+  args:
+    executable: /bin/bash
+    creates: "{{ forge_recovery_key_path }}"
+  when: forge_has_luks_build_key
+
+- name: Add recovery key to LUKS
+  ansible.builtin.command: >-
+    cryptsetup luksAddKey --key-file {{ forge_luks_build_key_path }} --pbkdf argon2id
+    {{ forge_luks_dev.stdout }} {{ forge_recovery_key_path }}
+  when: forge_has_luks_build_key
+  changed_when: true
+
+- name: Remove the build-time passphrase from LUKS
+  ansible.builtin.command: cryptsetup luksRemoveKey {{ forge_luks_dev.stdout }} {{ forge_luks_build_key_path }}
+  when: forge_has_luks_build_key
+  changed_when: true
+
+- name: Destroy the build-time key file
+  ansible.builtin.command: shred -u {{ forge_luks_build_key_path }}
+  when: forge_has_luks_build_key
+  changed_when: true
+
+- name: Recovery key notice
+  ansible.builtin.debug:
+    msg: >-
+      LUKS recovery key stored in {{ forge_recovery_key_path }} (root, 0600).
+      Move it to your key escrow / password vault and delete it from the node.
+  when: forge_has_luks_build_key
+
+# /etc/crypttab written by the installer (UUID based) is kept as-is: the
+# cryptsetup-initramfs hooks include the root volume automatically and the
+# clevis-initramfs hook performs the TPM2 unlock before falling back to the
+# passphrase prompt (recovery key).

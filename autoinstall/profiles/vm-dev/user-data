@@ -1,0 +1,179 @@
+#cloud-config
+# =============================================================================
+# Forge-OS ${FORGE_VERSION} (${FORGE_CODENAME}) - autoinstall profile: vm-dev
+# Target: KVM / VMware development VMs (>= 40 GiB disk). TPM is optional (swtpm / vTPM).
+# Rendered by build/scripts/30-inject-overlay.sh (envsubst). Variables:
+#   FORGE_HOSTNAME, FORGE_ADMIN_USER, FORGE_ADMIN_PASSWORD_HASH,
+#   FORGE_ADMIN_SSH_KEY, FORGE_LUKS_PASSPHRASE, FORGE_TIMEZONE
+# Reference: https://canonical-subiquity.readthedocs-hosted.com/en/latest/reference/autoinstall-reference.html
+# =============================================================================
+autoinstall:
+  version: 1
+  interactive-sections: []
+
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  timezone: ${FORGE_TIMEZONE}
+
+  refresh-installer:
+    update: false
+
+  # Minimal server: no snaps beyond the essentials, no recommends bloat.
+  source:
+    id: ubuntu-server-minimal
+    search_drivers: false
+  kernel:
+    package: linux-generic
+  codecs:
+    install: false
+  drivers:
+    install: false
+  kernel-crash-dumps:
+    enabled: false
+  updates: security
+
+  network:
+    version: 2
+    ethernets:
+      forge-uplink:
+        match:
+          name: "en*"
+        dhcp4: true
+        dhcp6: false
+        optional: true
+
+  # Online mirror when reachable, otherwise install from the ISO pool and the
+  # embedded offline repository (/forge/repo, wired up in late-commands).
+  apt:
+    preserve_sources_list: false
+    geoip: false
+    fallback: offline-install
+    mirror-selection:
+      primary:
+        - uri: http://archive.ubuntu.com/ubuntu
+          arches: [amd64]
+
+  identity:
+    hostname: ${FORGE_HOSTNAME}
+    realname: Forge-OS Administrator
+    username: ${FORGE_ADMIN_USER}
+    password: "${FORGE_ADMIN_PASSWORD_HASH}"
+
+  ssh:
+    install-server: true
+    allow-pw: false
+    authorized-keys:
+      - "${FORGE_ADMIN_SSH_KEY}"
+
+  # ---------------------------------------------------------------------------
+  # Disk layout (GPT, UEFI) - reduced sizes for development VMs:
+  #   1  ESP 1 GiB /boot/efi, 2  boot 2 GiB /boot (unencrypted, measured)
+  #   3  LUKS2 (AES-256-XTS) -> LVM vg_forge: root 12G, var 6G, var_log 3G,
+  #      var_log_audit 1G, var_tmp 1G, tmp 1G, home 3G, swap 3G (encrypted)
+  # Minimum disk: 40 GiB. Same key-rotation flow as the baseline profile.
+  # ---------------------------------------------------------------------------
+  storage:
+    swap:
+      size: 0
+    config:
+      - type: disk
+        id: disk-boot
+        match:
+          size: largest
+        ptable: gpt
+        wipe: superblock-recursive
+        preserve: false
+        grub_device: false
+
+      - type: partition
+        id: part-esp
+        device: disk-boot
+        size: 1G
+        flag: boot
+        grub_device: true
+        wipe: superblock
+        preserve: false
+      - type: format
+        id: fmt-esp
+        volume: part-esp
+        fstype: fat32
+        preserve: false
+
+      - type: partition
+        id: part-boot
+        device: disk-boot
+        size: 2G
+        wipe: superblock
+        preserve: false
+      - type: format
+        id: fmt-boot
+        volume: part-boot
+        fstype: ext4
+        preserve: false
+
+      - type: partition
+        id: part-crypt
+        device: disk-boot
+        size: -1
+        wipe: superblock
+        preserve: false
+      - type: dm_crypt
+        id: crypt-forge
+        volume: part-crypt
+        dm_name: forge-crypt
+        cipher: aes-xts-plain64
+        keysize: 512
+        key: "${FORGE_LUKS_PASSPHRASE}"
+        preserve: false
+
+      - type: lvm_volgroup
+        id: vg-forge
+        name: vg_forge
+        devices: [crypt-forge]
+        preserve: false
+
+      - {type: lvm_partition, id: lv-root,      volgroup: vg-forge, name: lv_root,          size: 12G, preserve: false}
+      - {type: lvm_partition, id: lv-var,       volgroup: vg-forge, name: lv_var,           size: 6G, preserve: false}
+      - {type: lvm_partition, id: lv-var-log,   volgroup: vg-forge, name: lv_var_log,       size: 3G,  preserve: false}
+      - {type: lvm_partition, id: lv-var-audit, volgroup: vg-forge, name: lv_var_log_audit, size: 1G,  preserve: false}
+      - {type: lvm_partition, id: lv-var-tmp,   volgroup: vg-forge, name: lv_var_tmp,       size: 1G,  preserve: false}
+      - {type: lvm_partition, id: lv-tmp,       volgroup: vg-forge, name: lv_tmp,           size: 1G,  preserve: false}
+      - {type: lvm_partition, id: lv-home,      volgroup: vg-forge, name: lv_home,          size: 3G,  preserve: false}
+      - {type: lvm_partition, id: lv-swap,      volgroup: vg-forge, name: lv_swap,          size: 3G,  preserve: false}
+
+      - {type: format, id: fmt-root,      volume: lv-root,      fstype: ext4, preserve: false}
+      - {type: format, id: fmt-var,       volume: lv-var,       fstype: ext4, preserve: false}
+      - {type: format, id: fmt-var-log,   volume: lv-var-log,   fstype: ext4, preserve: false}
+      - {type: format, id: fmt-var-audit, volume: lv-var-audit, fstype: ext4, preserve: false}
+      - {type: format, id: fmt-var-tmp,   volume: lv-var-tmp,   fstype: ext4, preserve: false}
+      - {type: format, id: fmt-tmp,       volume: lv-tmp,       fstype: ext4, preserve: false}
+      - {type: format, id: fmt-home,      volume: lv-home,      fstype: ext4, preserve: false}
+      - {type: format, id: fmt-swap,      volume: lv-swap,      fstype: swap, preserve: false}
+
+      - {type: mount, id: mnt-root,      device: fmt-root,      path: /,              options: "errors=remount-ro"}
+      - {type: mount, id: mnt-boot,      device: fmt-boot,      path: /boot,          options: "nodev,nosuid,noexec"}
+      - {type: mount, id: mnt-esp,       device: fmt-esp,       path: /boot/efi,      options: "umask=0077"}
+      - {type: mount, id: mnt-var,       device: fmt-var,       path: /var,           options: "nodev"}
+      - {type: mount, id: mnt-var-log,   device: fmt-var-log,   path: /var/log,       options: "nodev,nosuid,noexec"}
+      - {type: mount, id: mnt-var-audit, device: fmt-var-audit, path: /var/log/audit, options: "nodev,nosuid,noexec"}
+      - {type: mount, id: mnt-var-tmp,   device: fmt-var-tmp,   path: /var/tmp,       options: "nodev,nosuid,noexec"}
+      - {type: mount, id: mnt-tmp,       device: fmt-tmp,       path: /tmp,           options: "nodev,nosuid,noexec"}
+      - {type: mount, id: mnt-home,      device: fmt-home,      path: /home,          options: "nodev,nosuid"}
+      - {type: mount, id: mnt-swap,      device: fmt-swap,      path: none}
+
+  # Runs in the live environment after the base system is in /target.
+  late-commands:
+    - mkdir -p /target/opt/forge /target/etc/forge /target/var/lib/forge /target/var/log/forge
+    - cp -a /cdrom/forge/overlay /cdrom/forge/ansible /cdrom/forge/validate /cdrom/forge/manifest.json /target/opt/forge/
+    - test -d /cdrom/forge/repo && cp -a /cdrom/forge/repo /target/opt/forge/repo || true
+    - install -m 0644 /cdrom/forge/forge-release /target/etc/forge-release
+    - install -m 0600 /cdrom/forge/keys/luks-build-key /target/etc/forge/luks-build-key
+    - curtin in-target --target=/target -- /opt/forge/overlay/install/late-install.sh
+    - cp /var/log/installer/subiquity-server-debug.log /target/var/log/forge/installer-server-debug.log || true
+
+  error-commands:
+    - tar -czf /var/log/forge-install-failure.tgz /var/log/installer /var/log/syslog 2>/dev/null || true
+    - test -d /target/var/log && cp /var/log/forge-install-failure.tgz /target/var/log/ || true
+
+  shutdown: reboot

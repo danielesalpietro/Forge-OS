@@ -1,0 +1,44 @@
+---
+- name: Install ubuntu-pro-client
+  ansible.builtin.apt:
+    name: ubuntu-pro-client
+    state: present
+
+- name: Read token file if present
+  ansible.builtin.slurp:
+    path: "{{ forge_pro_token_file }}"
+  register: forge_pro_token_slurp
+  failed_when: false
+  no_log: true
+
+- name: Effective token
+  ansible.builtin.set_fact:
+    forge_pro_effective_token: "{{ forge_pro_token if forge_pro_token else (forge_pro_token_slurp.content | default('') | b64decode | trim) }}"
+  no_log: true
+
+- name: End role without a token
+  ansible.builtin.meta: end_role
+  when: not forge_pro_enabled or forge_pro_effective_token | length == 0 or forge_container_mode | default(false)
+
+- name: Pro status
+  ansible.builtin.command: pro status --format json
+  register: forge_pro_status
+  changed_when: false
+
+- name: Attach Ubuntu Pro
+  ansible.builtin.command: pro attach --no-auto-enable {{ forge_pro_effective_token }}
+  when: not (forge_pro_status.stdout | from_json).attached
+  no_log: true
+  changed_when: true
+
+- name: Enable services
+  ansible.builtin.command: pro enable {{ item }} --assume-yes
+  loop: "{{ forge_pro_services }}"
+  register: forge_pro_enable
+  changed_when: "'is already enabled' not in forge_pro_enable.stdout"
+  failed_when: forge_pro_enable.rc != 0 and 'is already enabled' not in forge_pro_enable.stdout and 'not entitled' not in forge_pro_enable.stdout
+
+- name: Remove the token file
+  ansible.builtin.file:
+    path: "{{ forge_pro_token_file }}"
+    state: absent

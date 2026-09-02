@@ -1,0 +1,4 @@
+---
+forge_ad_join_user: forge-join
+forge_ad_join_password_file: /etc/forge/ad-join-password
+forge_ad_computer_ou: ""

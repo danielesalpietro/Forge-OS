@@ -1,0 +1,29 @@
+---
+- name: Check current realm membership
+  ansible.builtin.command: realm list --name-only
+  register: forge_realm
+  changed_when: false
+
+- name: Join the AD domain (requires /etc/forge/ad-join-password or forge_ad_join_password)
+  ansible.builtin.shell: >-
+    realm join --unattended --user "{{ forge_ad_join_user }}"
+    {{ ('--computer-ou "' + forge_ad_computer_ou + '"') if forge_ad_computer_ou else '' }}
+    "{{ forge_ad_domain }}" < "{{ forge_ad_join_password_file }}"
+  args:
+    executable: /bin/bash
+  when: forge_ad_domain not in forge_realm.stdout
+  changed_when: true
+
+- name: SSSD AD tuning
+  ansible.builtin.template:
+    src: sssd-ad.conf.j2
+    dest: /etc/sssd/sssd.conf
+    mode: "0600"
+  notify: Restart sssd
+
+- name: Map AD groups to Forge-OS RBAC groups
+  ansible.builtin.template:
+    src: forge-ad-groups.j2
+    dest: /etc/sssd/conf.d/forge-ad-groups.conf
+    mode: "0600"
+  notify: Restart sssd

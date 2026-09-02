@@ -1,0 +1,21 @@
+---
+forge_base_packages:
+  - chrony
+  - rsyslog
+  - logrotate
+  - libpam-pwquality
+  - libpam-tmpdir
+  - acct
+  - sysstat
+  - aide
+  - jq
+  - curl
+  - lvm2
+  - needrestart
+forge_base_remove_packages:
+  - ufw
+  - telnet
+  - rsh-client
+  - talk
+  - nis
+  - xinetd

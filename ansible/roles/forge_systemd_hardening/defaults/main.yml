@@ -1,0 +1,18 @@
+---
+# Per-service sandboxing is opt-in until each drop-in is validated in KVM
+# (Phase 1.3 task "systemd hardening policies").
+forge_systemd_dropins_enabled: false
+forge_systemd_dropins:
+  - unit: chrony.service
+    content: |
+      [Service]
+      ProtectSystem=strict
+      ProtectHome=yes
+      PrivateTmp=yes
+      NoNewPrivileges=yes
+  - unit: fail2ban.service
+    content: |
+      [Service]
+      ProtectHome=yes
+      PrivateTmp=yes
+      NoNewPrivileges=yes
