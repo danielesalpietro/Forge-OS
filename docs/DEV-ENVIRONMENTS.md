@@ -15,7 +15,7 @@
 
 ```bash
 make builder                    # build the builder image (build/Dockerfile)
-cp .env.example .env && $EDITOR .env
+cp .env.example .env && $EDITOR .env   # optional; admin key defaults to autoinstall/keys/forge-admin.pub
 set -a; source .env; set +a
 make iso PROFILE=vm-dev         # → build/out/forge-os-<ver>-vm-dev-amd64.iso
 make lint-docker

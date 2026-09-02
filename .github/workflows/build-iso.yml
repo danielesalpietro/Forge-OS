@@ -75,8 +75,8 @@ jobs:
           FORGE_LUKS_PASSPHRASE: ${{ secrets.FORGE_LUKS_PASSPHRASE }}
           FORGE_HOSTNAME: ${{ vars.FORGE_HOSTNAME || 'forge-node' }}
         run: |
-          if [ -z "$FORGE_ADMIN_SSH_KEY" ]; then
-            echo "::warning::vars.FORGE_ADMIN_SSH_KEY is not set, generating a throw-away key for this build"
+          if [ -z "$FORGE_ADMIN_SSH_KEY" ] && [ ! -s autoinstall/keys/forge-admin.pub ]; then
+            echo "::warning::no admin key (vars.FORGE_ADMIN_SSH_KEY or autoinstall/keys/forge-admin.pub), generating a throw-away key"
             ssh-keygen -t ed25519 -N '' -f build/ci-key -q
             export FORGE_ADMIN_SSH_KEY="$(cat build/ci-key.pub)"
           fi

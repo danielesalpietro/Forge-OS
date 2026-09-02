@@ -12,7 +12,14 @@ need envsubst rsync python3 openssl
 : "${FORGE_HOSTNAME:=forge-node}"
 : "${FORGE_TIMEZONE:=Etc/UTC}"
 : "${FORGE_KERNEL_ARGS:=}"
-[[ -n "${FORGE_ADMIN_SSH_KEY:-}" ]] || die "FORGE_ADMIN_SSH_KEY must contain the initial admin's SSH public key"
+# Initial admin public key: environment variable, else the key committed in
+# autoinstall/keys/forge-admin.pub (public material only, safe to version).
+if [[ -z "${FORGE_ADMIN_SSH_KEY:-}" && -s "${REPO_ROOT}/autoinstall/keys/forge-admin.pub" ]]; then
+  FORGE_ADMIN_SSH_KEY="$(head -n1 "${REPO_ROOT}/autoinstall/keys/forge-admin.pub")"
+  log "using admin key from autoinstall/keys/forge-admin.pub (${FORGE_ADMIN_SSH_KEY##* })"
+fi
+[[ -n "${FORGE_ADMIN_SSH_KEY:-}" ]] || die "FORGE_ADMIN_SSH_KEY must contain the initial admin's SSH public key (or commit it to autoinstall/keys/forge-admin.pub)"
+[[ "${FORGE_ADMIN_SSH_KEY}" =~ ^(ssh-ed25519|sk-ssh-ed25519@openssh.com|ssh-rsa)\ [A-Za-z0-9+/=]+ ]] || die "FORGE_ADMIN_SSH_KEY does not look like an OpenSSH public key"
 if [[ -n "${FORGE_LUKS_PASSPHRASE_FILE:-}" ]]; then
   FORGE_LUKS_PASSPHRASE="$(<"${FORGE_LUKS_PASSPHRASE_FILE}")"
 fi

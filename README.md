@@ -149,7 +149,7 @@ docs/         plan, architecture, control matrix, ADRs
 ```
 
 ```bash
-cp .env.example .env            # set FORGE_ADMIN_SSH_KEY (your public key)
+cp .env.example .env            # optional overrides (admin key defaults to autoinstall/keys/forge-admin.pub)
 set -a; source .env; set +a
 make builder                    # builder container (xorriso, apt, ansible, linters)
 make iso PROFILE=baseline       # → build/out/forge-os-<version>-baseline-amd64.iso
